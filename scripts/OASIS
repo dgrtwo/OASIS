@@ -24,9 +24,9 @@ import sys
 import os
 import time
 
-import AnnotatedGenome
-from OASIS_functions import *
-from Constants import *
+from OASIS import AnnotatedGenome
+from OASIS.OASIS_functions import *
+from OASIS.Constants import *
 
 time1 = time.time()
 

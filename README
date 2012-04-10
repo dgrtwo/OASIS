@@ -1,3 +1,22 @@
 Optimized Annotation System for Insertion Sequences
 
 See OASIS_manual.pdf for details on implementation and usage.
+
+=============
+
+REQUIREMENTS
+
+Requires Biopython (>= 1.46)
+
+==============
+
+=============
+
+INSTALLATION
+
+Install using setup.py as follows:
+
+python setup.py build
+sudo python setup.py install
+
+=============
