@@ -16,6 +16,10 @@ from Bio import SeqRecord
 from OASIS_functions import *
 from Constants import *
 
+### PARAMETERS ###
+
+DIRECTION_TO_STRAND = {1: "+", -1: "-"}
+
 class IS:
     """represents an annotated IS element and some information about it"""
     def __init__(self, feature, chromosome, start, end, gen, 
@@ -151,22 +155,39 @@ class IS:
         retstr = retstr + "\n"
         #retstr = retstr + str(self.upstream_len) + "\t" + str(self.downstream_len) + "\n"
         return retstr
-    
+
+    def as_gff(self, set_name):
+        """return information as a .gff line"""
+        IRL = self.IRL if self.IRL != None else ""
+        IRR = self.IRR if self.IRR != None else ""
+
+        # NOTE: This gets rid of the version number in the chromosome,
+        # since no one uses it anyway.
+        annotations = ('set_id "%s"; family "%s"; group "%s"; ' + 
+                       'IRL "%s"; IRR "%s";') % (set_name, str(self.family),
+                        str(self.group), self.IRL, self.IRR)
+        return "\t".join([self.chromosome, "OASIS", "IS",
+                str(self.start+1), str(self.end), ".",
+                DIRECTION_TO_STRAND[self.direction], ".", annotations])
+
     def fasta(self):
         """return a fasta SeqRecord object of this IS"""
-        seq_id = self.chromosome + "_" + str(self.start+1) + "_" + str(self.end)
-        return SeqRecord.SeqRecord(id=seq_id, seq=self.seq)
-    
+        seq_id = "_".join((self.chromosome, str(self.start + 1),
+                            str(self.end)))
+        return SeqRecord.SeqRecord(id=seq_id, seq=self.seq, description="")
+
     def aa_fasta(self):
         """return a list of fasta SeqRecord objects of the ORFs of this IS"""
-        seq_id = self.chromosome + "_" + str(self.start) + "_" + str(self.end) \
-                + "_ORF"
+        seq_id = (self.chromosome + "_" +
+                    str(self.start + 1) + "_" + str(self.end) + "_ORF")
         retseqs = []
         if len(self.aaseqs)==1:
-            return [SeqRecord.SeqRecord(id=seq_id, seq=self.aaseqs[0])]
+            return [SeqRecord.SeqRecord(id=seq_id, seq=self.aaseqs[0],
+                                description="")]
         c = 1
         for s in self.aaseqs:
-            retseqs.append(SeqRecord.SeqRecord(id=seq_id+"_"+str(c), seq=s))
+            retseqs.append(SeqRecord.SeqRecord(id=seq_id+"_"+str(c), seq=s,
+                                                description=""))
             c = c + 1
         #print len(retseqs)
         return retseqs

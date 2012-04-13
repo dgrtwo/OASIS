@@ -7,12 +7,28 @@ Contains constants for OASIS program"""
 ### CONSTANTS ###
 
 ## BLAST executables
-BLAST_EXE = "/Genomics/grid/users/dgrtwo/OASIS/bin/blastall"
-FORMAT_EXE = "/Genomics/grid/users/dgrtwo/OASIS/bin/formatdb"
+import os
+import ConfigParser
 
-### ISFINDER LIBRARY FILES
-ISFINDER_NUCLEOTIDE_FILE = "ISFinder_nuc_081311.fasta"
-ISFINDER_AA_FILE = "ISFinder_aa_081311.fasta"
+config_file = os.path.join(os.path.split(__file__)[0], "data", "data.cfg")
+config_parser = ConfigParser.ConfigParser()
+config_parser.read(config_file)
+
+BLAST_EXE = config_parser.get("BLAST", "BLAST_EXE")
+FORMAT_EXE = config_parser.get("BLAST", "FORMAT_EXE")
+
+if BLAST_EXE.startswith("/PATH/TO") or FORMAT_EXE.startswith("/PATH/TO"):
+    raise Exception("Must set full path to NCBI blastall executable in " +
+                    config_file)
+
+ISFINDER_AA_FILE = "ISFinder_aa.fasta"
+
+# temporary directory
+TEMPORARY_DIRECTORY = "temp_OASIS"
+
+if not os.path.exists(TEMPORARY_DIRECTORY):
+    os.mkdir(TEMPORARY_DIRECTORY)
+
 
 MINLENGTH = 600
 

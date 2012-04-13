@@ -9,14 +9,6 @@ OASIS is a module designed for IS element annotation for prokaryote genomes.
 This is the main module, which uses other modules to perform the annotation.
 """
 
-#TODO
-#profile- speed up
-#improve edges (ISMex2)
-#rigorous test (see Zhou)
-#neaten algorithms
-#clean out debugs
-#write methods section
-
 #imports
 
 import getopt
@@ -60,7 +52,7 @@ args = sys.argv[1:]
 folder, genbank, output, backup = None, None, None, None
 annotated = True
 singles = False
-data_folder = "data"
+data_folder = None
 
 try:
 	opts, args = getopt.getopt(sys.argv[1:], "hf:g:o:a:s:r:b:s:d:", 
