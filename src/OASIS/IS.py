@@ -82,7 +82,20 @@ class IS:
     
     def set_IRs(self):
         """find the inverted repeats, if any, around an IS"""
-        self.IRL, self.IRR, lin, rin, self.IRscore = IRs(self.seq)
+        if self.family in NON_IR_FAMILIES:
+            return
+
+        verbose = False
+        s = self.seq if self.direction == 1 else self.seq.reverse_complement()
+        self.IRL, self.IRR, lin, rin, self.IRscore = IRs(s, verbose)
+        if verbose:
+            print s
+            print self.as_gff(1), self.IRL, self.IRR, lin, rin
+
+        # if this is reversed, switch the adjustments around
+        if self.direction == -1:
+            lin, rin = -rin, -lin
+
         self.change(startchange=lin, endchange=rin, absolute=False)
         
     def meets_conditions(self):
@@ -161,20 +174,28 @@ class IS:
         IRL = self.IRL if self.IRL != None else ""
         IRR = self.IRR if self.IRR != None else ""
 
-        # NOTE: This gets rid of the version number in the chromosome,
-        # since no one uses it anyway.
+        product = ""
+        if self.feature and 'locus_tag' in self.feature.qualifiers:
+            product = self.feature.qualifiers['locus_tag'][0]            
+
         annotations = ('set_id "%s"; family "%s"; group "%s"; ' + 
-                       'IRL "%s"; IRR "%s";') % (set_name, str(self.family),
-                        str(self.group), self.IRL, self.IRR)
+                       'IRL "%s"; IRR "%s"; locus_tag "%s"'
+                            ) % (set_name, str(self.family),
+                            str(self.group), self.IRL, self.IRR, product)
         return "\t".join([self.chromosome, "OASIS", "IS",
                 str(self.start+1), str(self.end), ".",
                 DIRECTION_TO_STRAND[self.direction], ".", annotations])
 
-    def fasta(self):
+    def fasta(self, set_name):
         """return a fasta SeqRecord object of this IS"""
-        seq_id = "_".join((self.chromosome, str(self.start + 1),
-                            str(self.end)))
-        return SeqRecord.SeqRecord(id=seq_id, seq=self.seq, description="")
+        seq_id = "|".join(["_".join((self.chromosome, str(self.start + 1),
+                          str(self.end))), DIRECTION_TO_STRAND[self.direction],
+                          set_name])
+        if self.direction == 1:
+            seq = self.seq
+        else:
+            seq = self.seq.reverse_complement()
+        return SeqRecord.SeqRecord(id=seq_id, seq=seq, description="")
 
     def aa_fasta(self):
         """return a list of fasta SeqRecord objects of the ORFs of this IS"""

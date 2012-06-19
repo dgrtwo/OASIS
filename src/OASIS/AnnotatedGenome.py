@@ -23,12 +23,12 @@ import IS
 import Profile
 from OASIS_functions import *
 from Constants import *
+from SW import myalign
 
 #classes
 class AnnotatedGenome:
     """The genome class represents a genome and data on its gene that is needed
     to annotate the IS elements of a genome"""
-
     def __init__(self, genome_file=None, lst=None, annotated=False,
                  data_folder=None):
         """initializes with an genbank seq_record object and whether
@@ -61,22 +61,20 @@ class AnnotatedGenome:
         aafile = os.path.join(data_folder, ISFINDER_AA_FILE)
         self.profile = Profile.Profile(aafile)
 
-        for seq_record in seqlist:
-            if annotated:
-                #find all transposase genes
-                thislist = [f for f in seq_record.features if related(f) and 'locus_tag' in f.qualifiers]
-                for f in thislist:
-                        self.namedict[f.qualifiers['locus_tag'][0]] = seq_record.id
-                self.candidates = self.candidates + thislist
+        self.all_features = []
 
-                #if any([related(f) for f in seq_record.features]):
-                #    print seq_record
+        for seq_record in seqlist:
+            #find all transposase genes
+            thislist = [f for f in seq_record.features if f.type == "CDS"
+                            and 'locus_tag' in f.qualifiers]
+            for f in thislist:
+                self.namedict[f.qualifiers['locus_tag'][0]] = seq_record.id
+            if annotated:
+                self.candidates += filter(related, thislist)
             else:
-                #include all genes
-                thislist = [f for f in seq_record.features if f.type == "CDS"]
-                for f in thislist:
-                    self.namedict[f.qualifiers['locus_tag'][0]] = seq_record.id
-                self.candidates = self.candidates + thislist
+                self.candidates += thislist
+            
+            self.all_features += thislist
 
     def annotate(self):
         """fill self.annotations with IS elements in this genome"""
@@ -84,69 +82,94 @@ class AnnotatedGenome:
         if self.annotations: return
 
         self.annotations = []
-        already_indices = []
-        already = []
+#         for i in relevant_indices:
+#             for j in relevant_indices:
+#                 print (self.candidates[i].location._start.position,
+#                        self.candidates[j].location._start.position,
+#                        self.__match(i, j, verbose=True))
+        #print "\n".join([str((c, c.qualifiers)) for i, c in relevants])
 
         list_length = len(self.candidates)
 
-        #iterate through candidates, compare each to the rest in the list
-        for i in range(list_length-1):
-            amatch = None
-            lst = []
-            for j in range(i+1, list_length):
-                if j not in already_indices: #no need to compare more than once
-                    if self.__match(i, j):
-                        lst.append(self.__find_full(i, j))
+        #iterate through candidates, compare each to all in genome
+        already_added = set()
+        for candidate in self.candidates:
+            if candidate in already_added:
+                continue
+            features = [f for f in self.all_features if candidate == f or
+                            (candidate not in already_added and
+                             self.__match(candidate, f))]
 
-                        # check if there are multiple different lengths
-#                         length_i = self.candidates[i].location._end.position - self.candidates[i].location._start.position
-#                         length_j = self.candidates[j].location._end.position - self.candidates[j].location._start.position
-#                         if length_i != length_j:
-#                             print self.candidates[i]
-#                             print self.candidates[j]
+            if len(features) < 2:
+                continue
 
-                        amatch = self.__find_full(j, i)
-                        already_indices.append(j)
-                        if i not in already_indices:
-                            already_indices.append(i)
+            for f in features:
+                already_added.add(f)
 
-            #remove multiple ORFs
-            if amatch:
-                lst = [amatch] + lst
-                newlst = [m for m in lst if not IS_in_list(m, already)]
-                already = already + newlst
-                if len(newlst) > 0:
-                    self.annotations.append(ISSet.ISSet(newlst, self.profile))
+            lst = [IS.IS(f, self.namedict[f.qualifiers['locus_tag'][0]],
+                         f.location._start.position,
+                         f.location._end.position, self) for f in features]
+            self.annotations.append(ISSet.ISSet(lst, self.profile))
+
+#         for i in range(list_length-1):
+#             amatch = None
+#             lst = []
+#             for j in range(i+1, list_length):
+#                 if j not in already_indices: #no need to compare more than once
+#                     if self.__match(i, j):
+#                         lst.append(self.__find_full(i, j))
+# 
+#                         # check if there are multiple different lengths
+# #                         length_i = self.candidates[i].location._end.position - self.candidates[i].location._start.position
+# #                         length_j = self.candidates[j].location._end.position - self.candidates[j].location._start.position
+# #                         if length_i != length_j:
+# #                             print self.candidates[i]
+# #                             print self.candidates[j]
+# 
+#                         amatch = self.__find_full(j, i)
+#                         already_indices.append(j)
+#                         if i not in already_indices:
+#                             already_indices.append(i)
+# 
+#             #remove multiple ORFs
+#             if amatch:
+#                 lst = [amatch] + lst
+#                 newlst = [m for m in lst if not IS_in_list(m, already)]
+#                 already = already + newlst
+#                 if len(newlst) > 0:
+#                     self.annotations.append(ISSet.ISSet(newlst, self.profile))
 
         #perform operations to improve IS elements
         self.clean_up()
 
+    def find_set_from_start(self, start_coordinate, wiggle=100):
+        """
+        find the set that contains an element close to the given
+        start coordinate- for testing purposes
+        """
+        for s in self.annotations:
+            diff = min([abs(e.start - start_coordinate) for e in s.lst])
+            if diff <= wiggle:
+                return s
+
+    def print_set(self, start, wiggle):
+        print "\n".join([e.as_gff(1)
+                         for e in self.find_set_from_start(start, wiggle).lst])
+
     def clean_up(self):
         """perform the necessary changes- clean edges, add IRs, filter,
         BLAST, find partials and singles, etc."""
+        [is_set.re_annotate() for is_set in self.annotations]
         self.annotations = [is_set for is_set in self.annotations if is_set.filter()]
         #[is_set.clean_edges() for is_set in self.annotations]
-        [is_set.re_annotate() for is_set in self.annotations]
-        #print "a"
+
         self.__find_singles()
         self.__find_partials(minimum_blast_length=500)
-        #print "b"
-        [is_set.add_IRs() for is_set in self.annotations]
         [is_set.identify_transposase() for is_set in self.annotations]
-        #print "c"
         self.__group_annotations()
-        [is_set.re_annotate(from_edges=True) for is_set in self.annotations]
-        return
 
-        #below here doesn't happen
-        self.__find_partials()
-        self.__find_singles()
-        [is_set.clean_edges() for is_set in self.annotations]
+        #[is_set.re_annotate(from_edges=True) for is_set in self.annotations]
         [is_set.add_IRs() for is_set in self.annotations]
-        self.__find_partials()
-        [is_set.clean_edges() for is_set in self.annotations]
-        [is_set.add_IRs() for is_set in self.annotations]
-        self.remove_redundant()
 
     def __group_annotations(self):
         """group self.annotations by combining sets of similar IS elements"""
@@ -206,47 +229,47 @@ class AnnotatedGenome:
     def write_fasta(self, outfile):
         """write fasta file"""
         fasta_out = open(outfile + ".fasta", "w")
-        for is_set in self.annotations:
-            SeqIO.write(is_set.fasta(), fasta_out, "fasta")
+        for i, is_set in enumerate(self.annotations):
+            SeqIO.write(is_set.fasta(str(i + 1)), fasta_out, "fasta")
             fasta_out.write("\n")
         fasta_out.close()
 
     def __write_singles(self, outfile):
         """write a single IS from each group to the output file"""
         fasta_out = open(outfile, "w")
-        for is_set in self.annotations:
-            SeqIO.write([is_set.representative().fasta()], fasta_out, "fasta")
+        for i, is_set in enumerate(self.annotations):
+            SeqIO.write([is_set.representative().fasta(str(i+1))],
+                            fasta_out, "fasta")
         fasta_out.close()
 
-    def __get_extensions(self, index, window):
-        """given the index of a candidate, get the windows surrounding it"""
-        f = self.candidates[index]
+    def __get_extensions(self, f, window):
+        """given a feature, get the windows surrounding it"""
         start = f.location._start.position
         end = f.location._end.position
         chromosome = self.namedict[f.qualifiers['locus_tag'][0]]
         seq = self.seqdict[chromosome].seq
-        if self.candidates[index].strand == None: #if it's forward
+        if f.strand == 1: #if it's forward
             return seq[start-window:start].reverse_complement(), seq[end:end+window]
         return seq[end:end+window], seq[start-window:start].reverse_complement()
 
-    def __match(self, i, j):
+    def __match(self, f1, f2, verbose=False):
         """test whether two CDSs match as IS gene candidates"""
         #first, check whether their CDSs are the same length and have low
         #divergence
 
-        aaseq_1 = self.get_aaseq(self.candidates[i])
-        aaseq_2 = self.get_aaseq(self.candidates[j])
+        aaseq_1 = self.get_aaseq(f1)
+        aaseq_2 = self.get_aaseq(f2)
 
         if abs(len(aaseq_1) - len(aaseq_2)) > LENGTH_WIGGLE:
             return False #they are not the same length
 
-        if divergence(str(aaseq_1), str(aaseq_2)) < MIN_DIVERGENCE:
+        if similarity(str(aaseq_1), str(aaseq_2)) < MIN_AA_SIMILARITY:
             return False #the amino acid sequences are too divergent
 
         #now, check their surrounding regions
         #get windows
-        before_window_1, after_window_1 = self.__get_extensions(i, EXTEND_LENGTH)
-        before_window_2, after_window_2 = self.__get_extensions(j, EXTEND_LENGTH)
+        before_window_1, after_window_1 = self.__get_extensions(f1, EXTEND_LENGTH)
+        before_window_2, after_window_2 = self.__get_extensions(f2, EXTEND_LENGTH)
 
         #check whether they match the similarity threshold
         if not seq_match(before_window_1, before_window_2, EXTEND_LENGTH, MAX_MISS) \
@@ -266,12 +289,12 @@ class AnnotatedGenome:
         end = feature.location._end.position
 
         #correct for extension length
-        if feature.strand == None: #if it is direct
-            start = start - extend(before_window_1, before_window_2, FULL_MAX_MISS)
-            end = end + extend(after_window_1, after_window_2, FULL_MAX_MISS)
-        else: #if it is reversed
-            start = start - extend(after_window_1, after_window_2, FULL_MAX_MISS)
-            end = end + extend(before_window_1, before_window_2, FULL_MAX_MISS)
+#         if feature.strand == None: #if it is direct
+#             start = start - extend(before_window_1, before_window_2, FULL_MAX_MISS)
+#             end = end + extend(after_window_1, after_window_2, FULL_MAX_MISS)
+#         else: #if it is reversed
+#             start = start - extend(after_window_1, after_window_2, FULL_MAX_MISS)
+#             end = end + extend(before_window_1, before_window_2, FULL_MAX_MISS)
         chromosome = self.namedict[feature.qualifiers['locus_tag'][0]]
         return IS.IS(feature, chromosome, start, end, self)
 
@@ -381,6 +404,19 @@ class AnnotatedGenome:
         #iterate over IS elements that haven't already been used (no multi ISs)
         unused = self.__unused()
 
+        elements = [(1355483, 1356588), (2442952, 2447572), (2448133, 2449348),
+                    (4481864, 4482886)]
+
+        def relevant_feature(f):
+            start = f.location._start.position
+            end  = f.location._end.position
+            return any([start >= s - 100 and start <= e + 100 and
+                        end >= s - 100 and end <= e + 100 for s, e in elements])
+
+        relevants = [c for i, c in enumerate(unused)
+                            if relevant_feature(c)]
+        #print "\n".join([str((c, c.qualifiers)) for c in relevants])
+
         i = 0
         #iterate over unused candidates
         while i < len(unused):
@@ -390,12 +426,16 @@ class AnnotatedGenome:
             if i < len(unused) - 1 and same_gene(c, unused[i+1]):
                 ORF_list = [c, unused[i+1]]
                 i = i + 1
+            if c in relevants:
+                print self.redundant_feature(c), ORF_list
             if not self.redundant_feature(c):
                 result_IS = None
                 if ORF_list:
                     result_IS = self.find_IRs_around(lst=ORF_list)
                 else:
-                    result_IS = self.find_IRs_around(c=c)
+                    if c in relevants:
+                        print "here"
+                    result_IS = self.find_IRs_around(c=c, verbose=(c in relevants))
                 if result_IS:
                     self.annotations.append(ISSet.ISSet([result_IS], self.profile))
             i = i + 1
@@ -409,8 +449,12 @@ class AnnotatedGenome:
         return ret
 
     def __unused(self):
-        """return a list of candidates that have not yet been annotated"""
-        return [c for c in self.candidates if not self.redundant_feature(c)]
+        """
+        return a list of candidates that have not yet been annotated and
+        that match the criteria for single-copy elements
+        """
+        return [c for c in self.candidates if not self.redundant_feature(c)
+                    and related(c, single=True)]
 
     def redundant_feature(self, f):
         """check whether a feature is already contained within an annotated IS
@@ -429,7 +473,7 @@ class AnnotatedGenome:
         """check whether an IS element is redundant"""
         return IS_in_list(e, self.all_elements())
 
-    def find_IRs_around(self, c=None, lst=None):
+    def find_IRs_around(self, c=None, lst=None, verbose=False):
         """given a candidate gene, or list of ORFs, return an IS around it,
         or return False if no inverted repeats are found"""
         if c:
@@ -458,6 +502,13 @@ class AnnotatedGenome:
             before = chromosome[end-SINGLE_IR_IN_WINDOW:end+SINGLE_IR_OUT_WINDOW]
             after = chromosome[start-SINGLE_IR_OUT_WINDOW:start+SINGLE_IR_IN_WINDOW]
             before = before.reverse_complement()
+
+        if verbose:
+            print start, end
+            print before
+            print after
+            print myalign(before, after)
+            print self.profile.find_IRs(None, before, after, SINGLE_IR_IN_WINDOW)
         #IR_result = find_IR_large_window(before, after.reverse_complement())
 
         #family, group = self.profile.identify_family(seq)

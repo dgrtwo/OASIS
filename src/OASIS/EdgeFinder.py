@@ -10,6 +10,8 @@ likelihood estimate, assuming a multinomial distribution
 import random
 import math
 
+from Bio import Seq
+
 from OASIS_functions import *
 from Constants import *
 
@@ -21,8 +23,8 @@ NULL_DISTRIBUTION = dict([(n, .25) for n in nucs])
 
 # distribution of nucleotides if there is conservation
 # assume that the most common nucleotide has a large probability
-# and that each other a small probability
-[MOST_COMMON, OTHER] = [.991, .003]
+# and that each other hqs a small probability
+[MOST_COMMON, OTHER] = [.995, .005]
 
 # nucleotide distributions- map nucleotides to parameter distributions
 CONSERVED_DISTRIBUTIONS = dict([(n, dict([(n, OTHER) for n in nucs])) for n in nucs])
@@ -47,6 +49,18 @@ def factorial(n):
         result = -result
     REMEMBERED_FACTORIALS[n] = result
     return result
+
+def cumulative_sum(lst):
+    """
+    return the cumulative sum of a list (will end up being n+1 long and start
+    with 0)
+    """
+    ret = [0]
+    total = 0
+    for e in lst:
+        total += e
+        ret.append(total)
+    return ret
 
 def product(lst):
     """return the product of all elements of a list"""
@@ -74,6 +88,10 @@ def argmax(seq, fn):
     'three'
     """
     return argmin(seq, lambda x: -fn(x))
+
+def whichmax(seq):
+    """return the index of the highest element"""
+    return max([(b, a) for a, b in enumerate(seq)])[1]
 
 def multinomial_likelihood(data, parameters):
     """given a list of data and a dictionary mapping values to probabilities,
@@ -113,25 +131,22 @@ def log_likelihood_unconserved(data):
     region"""
     return log_multinomial_likelihood(data, NULL_DISTRIBUTION)
 
-def find_left_edge(seqs):
+def combine_likelihoods(conserved_likelihoods, unconserved_likelihoods):
+    conserved_region_l = cumulative_sum(conserved_likelihoods)
+    unconserved_region_l = cumulative_sum(unconserved_likelihoods[::-1])[::-1]
+    return map(sum, zip(conserved_region_l, unconserved_region_l))
+
+def find_left_edges(seqs, individual=True, verbose=False):
     """given a list of aligned Seq objects, find the index of the edge
     of conservation among them assuming that the left side is conserved"""
     # makes sure there are multiple sequences and that sequences are the same length
     assert len(seqs) > 1, "find_left_edge must be given multiple sequences"
     
-    #print "\n".join(map(str, seqs))
-    
     lengths = list(set([len(s) for s in seqs]))
     
     if 0 in lengths:
         # missing region- return 0 as distance out
-        return 0
-    
-    if len(lengths) != 1:
-        print "there are", len(lengths), "possible lengths!"
-        print lengths
-        return 0
-    #assert len(lengths) == 1, "All find_left_edge sequences must be the same length"
+        return [0] * len(seqs)
     
     n = lengths[0]
     
@@ -142,112 +157,43 @@ def find_left_edge(seqs):
     # this is the product of the likelihoods that it is conserved up to the
     # nth element and that it is not conserved from the nth element onward
     
-    # compute both LOG likelihoods for each element
-    conserved_l = [log_likelihood_conserved(d) for d in dists]
-    unconserved_l = [log_likelihood_unconserved(d) for d in dists]
-    
-    # dynamic programming
-    # find the likelihoods of all possible lengths of conserved sequences
-    # starting from the beginning of the sequence, and all possible unconserved
-    # leading to the end of the sequence
-        
-    conserved_region_l = [0] * (n + 1)
-    log_likelihood = 0
-    for i in range(n):
-        conserved_region_l[i] = log_likelihood
-        log_likelihood = log_likelihood + conserved_l[i]
-    conserved_region_l[i] = log_likelihood
-    
-    # same for likelihoods of corresponding unconserved sequences (going backwards
-    unconserved_region_l = [0] * (n + 1)
-    log_likelihood = 0
-    for i in range(n, -1, -1):
-        unconserved_region_l[i] = log_likelihood
-        if i < n:
-            log_likelihood = log_likelihood + unconserved_l[i]
-    
-    #for k in range(n):
-    #    print "Likelihood", k, product(conserved_l[:k]) * product(unconserved_l[k:])
-    
-    # find k with highest log likelihood:
-    highest_lik = None
-    highest_k = -1
-    for k in xrange(0, n):
-        lik = conserved_region_l[k] + unconserved_region_l[k]
-        if lik > highest_lik or k == 0:
-            highest_lik = lik
-            highest_k = k
-        
-    return highest_k
+    conserved_l = map(log_likelihood_conserved, dists)
+    unconserved_l = map(log_likelihood_unconserved, dists)
 
-def find_right_edge(seqs):
+    likelihoods = combine_likelihoods(conserved_l, unconserved_l)
+    best_k = whichmax(likelihoods)
+
+    revcmp = lambda s: str(Seq.Seq(s).reverse_complement())
+
+    if verbose:
+        print "\n".join([revcmp(s[:best_k+100]) for s in seqs])
+        print "\n".join([" " * 100 + revcmp(s[:best_k]) for s in seqs])
+        print best_k
+
+    if len(seqs) < 3 or not individual:
+        return [best_k] * len(seqs)
+
+    modes = map(mode_nucs, dists[:best_k])
+
+    individual_limits = []
+    for s in seqs:
+        conserved_l = [math.log(MOST_COMMON) if n == mode else math.log(OTHER)
+                            for n, mode in zip(s, modes)]
+        unconserved_l = [math.log(NULL_DISTRIBUTION[n]) for n in s[:best_k]]
+        likelihoods = combine_likelihoods(conserved_l, unconserved_l)
+
+        individual_limits.append(whichmax(likelihoods))
+
+    # if there is a maximum, cut it to the next highest (it's an artifact)
+    individual_limits[whichmax(individual_limits)] = (
+                                        sorted(individual_limits)[-2])
+
+    return individual_limits
+
+def find_right_edges(seqs, individual=True, verbose=False):
     """find the index edge of conservation, this time assuming the right is
     conserved and the left is unconserved"""
     backwards_seqs = [s[::-1] for s in seqs]
-    return len(seqs[0]) - find_left_edge(backwards_seqs)
+    return [len(seqs[0]) - e
+                for e in find_left_edges(backwards_seqs, individual, verbose)]
 
-### CLASSES ###
-class ConservedElement:
-    """a suspected conserved element, with a known conserved region and
-    surrounding unknown regions (each a Seq object)"""
-    def __init__(self, known, leftregion, rightregion, knownstart=None, knownend=None):
-        self.known = known
-        self.leftregion = leftregion
-        self.rightregion = rightregion
-        
-        # the known start and end positions of the region
-        self.knownstart = knownstart
-        self.knownend = knownend
-
-class ConservedElementSet:
-    """a set of elements that have some conserved region"""
-    def __init__(self, lst=None):
-        """can be initialized with a list of elements or with nothing"""
-        self.elements = []
-        
-        if lst:
-            self.elements = self.elements + lst[:] # copy of list
-    
-    def add_element(self, element):
-        """add a ConservedElement"""
-        self.elements.append(element)
-    
-    def find_edges(self):
-        """find and mark the edges"""
-        # use maximum likelihood edges
-        self.left_side_edge = find_right_edge([e.leftregion for e in self.elements])
-        self.right_side_edge = find_left_edge([e.rightregion for e in self.elements])
-        
-        # figure out the offset for the left and right sides
-        self.left_offset = self.left_side_edge - len(self.elements[0].leftregion)
-        self.right_offset = self.right_side_edge
-        
-        for e in self.elements:
-            e.knownstart = e.knownstart + self.left_offset
-            e.knownend = e.knownend + self.right_offset
-    
-    def __repr__(self):
-        """for testing purposes"""
-        ret = ""
-        for e in self.elements:
-            ret = ret + str(e.leftregion[:self.left_side_edge]) + "|" + \
-            str(e.leftregion[self.left_side_edge:]) + " " + str(e.known) + " " + \
-            str(e.rightregion[:self.right_side_edge]) + "|" + \
-            str(e.rightregion[self.right_side_edge:]) + " " + str(e.knownstart) + ", " + str(e.knownend) + "\n"
-        return ret
-
-### MAIN ###
-
-# experiment functions
-def random_seq(length):
-    return "".join([random.choice(nucs) for i in range(length)])
-
-# experiment
-if __name__ == "__main__" and False:
-    real_element = "AAAAAGAATACGGGGAAAAA"
-    element_regions = [(random_seq(10) + real_element[:10], real_element[4:-6], real_element[-15:] + random_seq(10)) for i in range(4)]
-    elements = [ConservedElement(k, l, r, 223, 233) for l, k, r in element_regions]
-    
-    s = ConservedElementSet(elements)
-    s.find_edges()
-    print s

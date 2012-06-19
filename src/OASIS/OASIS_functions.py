@@ -12,6 +12,7 @@ import re
 import math
 import random
 
+from Bio import Seq
 from Bio import SeqIO
 from Bio.Alphabet import IUPAC
 
@@ -23,19 +24,20 @@ from SW import myalign
 nucs = ["A", "G", "C", "T"]
 
 #functions
-def related_text(txt):
+def related_text(txt, single):
     """return whether a protein is a transposase or integrase from its
     product description"""
-    return (("transposase" in txt or "integrase" in txt) and ("integrase family" not in txt))
+    return (("transposase" in txt or ("integrase" in txt and not single))
+                and ("integrase family" not in txt))
 
-def related(feature):
+def related(feature, single=False):
     """recognizes whether a feature is relevant"""
     if feature.type != "CDS":
         return False
     if "product" in feature.qualifiers:
-        return related_text(feature.qualifiers["product"][0].lower())
+        return related_text(feature.qualifiers["product"][0].lower(), single)
     if "function" in feature.qualifiers:
-        return related_text(feature.qualifiers["function"][0].lower())
+        return related_text(feature.qualifiers["function"][0].lower(), single)
     return False
 
 def extend(seq1, seq2, maxmis):
@@ -89,19 +91,32 @@ def IS_in_list(m, lst):
             return True
     return False
 
-def IRs(seq):
+def IRs(seq, verbose=False):
     """takes a Seq object representing an IS element sequence.
     Returns IR elements on either side, as well as their starting indices,
     and a similarity score"""
     start = str(seq[:IR_WINDOW])
     end = str(seq[-IR_WINDOW:].reverse_complement())
+
     #aln = pairwise2.align.localms(start, end, 1, -20, -5, -2)
     aln = myalign(start, end)
-    if aln[2] < MIN_IR_SCORE_SMALL: return False, False, 0, 0, 0
+
+    if (aln[2] < MIN_IR_SCORE_CHANGE):
+        # try a close alignment with a lower penalty- one that doesn't move
+        # based on the alignment, and accepts only an exact match
+        close_aln = myalign(start[:IR_WINDOW_NONCHANGE],
+                            end[:IR_WINDOW_NONCHANGE], mismatch_score_num=-1)
+
+        if (close_aln[2] < MIN_IR_SCORE_NONCHANGE or
+            close_index(start, close_aln[0]) != 0 or
+            close_index(end, close_aln[1]) != 0):
+            # no alignment near or far
+            return False, False, 0, 0, 0
+        return close_aln[0], close_aln[1], 0, 0, close_aln[2]             
+
+    lin, rin = close_index(start, aln[0]), -close_index(end, aln[1])
     
-    #print aln[0], aln[1], close_index(start, aln[0]), -close_index(end, aln[1]), aln[2]
-    
-    return aln[0], aln[1], close_index(start, aln[0]), -close_index(end, aln[1]), aln[2]
+    return aln[0], aln[1], lin, rin, aln[2]
 
 def seq_match(seq1, seq2, threshold, mm):
     """return whether seq1 and seq2 align to threshold length)"""
@@ -173,9 +188,9 @@ def similar(set1, set2, verbose=False):
     
 def translate(seq):
     """return a sequence translated with the bacterial code"""
-    newseq = seq #must not change the variable
-    newseq.alphabet = IUPAC.unambiguous_dna
-    return bacteria_translator.translate(newseq)
+    newseq = Seq.Seq(str(seq), alphabet=IUPAC.unambiguous_dna)
+    return newseq.translate()
+    #return bacteria_translator.translate(newseq)
 
 class listfile:
     """a class with the readline attribute of a file, for passing to SeqIO"""
@@ -248,8 +263,11 @@ def same_gene(f1, f2):
         
     return start2 - end1 <= ORF_WINDOW
 
-def divergence(seq1, seq2):
-    """takes two sequences as strings and calculates their divergence"""
+def similarity(seq1, seq2):
+    """
+    takes two sequences as strings and calculates their similarity with
+    a simple algorithm
+    """
     matchnum = 0
     i = 0
     j = 0

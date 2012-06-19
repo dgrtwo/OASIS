@@ -33,7 +33,7 @@ if not os.path.exists(TEMPORARY_DIRECTORY):
 MINLENGTH = 600
 
 LENGTH_WIGGLE = 2
-MIN_DIVERGENCE = .95
+MIN_AA_SIMILARITY = .95
 EXTEND_LENGTH = 25
 MAX_MISS = 3
 FULL_EXTEND = 2000
@@ -55,10 +55,19 @@ MIN_PARTIAL_LEN = 250 # minimum length for a match to count as a partial
 ## windows to check for inverted repeats for single copies:
 SINGLE_IR_OUT_WINDOW = 500
 SINGLE_IR_IN_WINDOW = 20
+SINGLE_IR_MIN_SCORE = 11
 
 ## checking for inverted repeats around the edges of annotated IS elements
-IR_WINDOW = 20
-MIN_IR_SCORE_SMALL = 6
+IR_WINDOW = 100
+MIN_IR_SCORE_CHANGE = 11
+
+# checking for inverted repeats immediately on the inside- lower penalty
+IR_WINDOW_NONCHANGE = 20
+MIN_IR_SCORE_NONCHANGE = 10
+
+
+## families that do not have inverted repeats
+NON_IR_FAMILIES = ["IS110", "IS200/IS605"]
 
 #identifying transposase family
 TPASE_MAX_E_VALUE = 10 ** -12

@@ -100,7 +100,7 @@ class Profile:
         IR1 = seq1[start_i-1:max_i]
         IR2 = seq2[start_j-1:max_j].reverse_complement()
 
-        if score > MIN_IR_SCORE_SMALL:
+        if score > SINGLE_IR_MIN_SCORE:
             # return actual IR sequences
             return IR1, IR2
             return max_i-in_window, len(seq2)-max_j-in_window

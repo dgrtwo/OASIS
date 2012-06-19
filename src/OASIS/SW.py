@@ -2,13 +2,9 @@ def zeros((dim1, dim2)):
     """return a 2D array of zeroes with the given dimensions"""
     return [[0 for i in range(dim2)] for j in range(dim1)]
 
-def myalign(seq1, seq2):
+def myalign(seq1, seq2, penalty=-4, match_score_num=1, mismatch_score_num=-3):
     """return a local alignment"""
     m,n =  len(seq1),len(seq2) #length of two sequences
-    
-    penalty=-4;   #define the gap penalty
-    match_score_num = 1
-    mismatch_score_num = -3
     
     #generate DP table and traceback path pointer matrix
     score=zeros((m+1,n+1))   #the DP table

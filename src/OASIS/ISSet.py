@@ -51,38 +51,18 @@ class ISSet:
         befores = [b[:minlength_before] for b in befores]
         afters = [a[:minlength_after] for a in afters]
 
-        # old:
-        #before_len = multiple_extend(befores)
-        #after_len = multiple_extend(afters)
-        before_len = EdgeFinder.find_left_edge([str(s) for s in befores])
-        after_len = EdgeFinder.find_left_edge([str(s) for s in afters])
+        verbose = False
+        individual = True
 
-        if from_edges and False:
-            print "BEFORES:"
-            print "\n".join([str(b[:20]) + "\t" + str(e) for b, e in zip(befores, self.lst)])
-            print "AFTERS:"
-            print "\n".join([str(a[:20]) + "\t" + str(e) for a, e in zip(afters, self.lst)])
-            print "before_len", before_len
-            print "after_len", after_len
+        before_lens = EdgeFinder.find_left_edges([str(s) for s in befores],
+                                                    individual, verbose)
+        after_lens = EdgeFinder.find_left_edges([str(s) for s in afters],
+                                                    individual, verbose)
 
-        # TESTING
-        if False:
-            print before_len
-            print after_len
-
-            for s in befores:
-                print str(s[before_len-20:before_len]) + "|" + str(s[before_len:before_len+20])
-
-            for s in afters:
-                print str(s[after_len-20:after_len]) + "|" + str(s[after_len:after_len+20])
-
-            print
-            print
-
-        for e in self.lst:
+        for e, before_len, after_len in zip(self.lst, before_lens, after_lens):
             if from_edges:
                 start = e.start
-                end = e.end+1
+                end = e.end
             else:
                 start = e.feature.location._start.position
                 end = e.feature.location._end.position
@@ -100,12 +80,12 @@ class ISSet:
         """add inverted repeats to each IS in this set"""
         [e.set_IRs() for e in self.not_partial()]
 
-    def filter(self):
+    def filter(self, verbose=True):
         """include IS elements that meet the conditions- return False if the
         overall group does not meet the conditions"""
         self.lst = [e for e in self.lst if e.meets_conditions()]
         if len(self.lst) >= 4: return True #is very rarely a mistake
-        return len(self.lst) > 0 and self.lst[0].is_valid()
+        return len(self.lst) > 0 #and self.lst[0].is_valid()
 
     def add(self, other_type):
         """combines the other set of IS elements with this one"""
@@ -213,11 +193,11 @@ class ISSet:
         """
         return [e.as_gff(str(counter)) for e in self.lst]
 
-    def fasta(self):
+    def fasta(self, set_name):
         """return as a list of SeqRecord objects, one for each IS"""
         retlist = []
         for e in self.lst:
-            retlist = retlist + [e.fasta()] + e.aa_fasta()
+            retlist = retlist + [e.fasta(set_name)] #+ e.aa_fasta(set_name)
         return retlist
 
     def __repr__(self):
