@@ -7,7 +7,6 @@ genomes.
 
 This module represents a set of copies of an IS element."""
 
-#imports
 import os
 
 from Bio import SeqRecord
@@ -38,7 +37,7 @@ class ISSet:
         if len(self.lst) < 2:
             return
 
-        #unzip
+        # unzip
         if from_edges:
             [befores, afters] = zip(*[e.around_IS(window) for e in self.lst])
         else:
@@ -84,8 +83,8 @@ class ISSet:
         """include IS elements that meet the conditions- return False if the
         overall group does not meet the conditions"""
         self.lst = [e for e in self.lst if e.meets_conditions()]
-        if len(self.lst) >= 4: return True #is very rarely a mistake
-        return len(self.lst) > 0 #and self.lst[0].is_valid()
+        if len(self.lst) >= 4: return True # is very rarely a mistake
+        return len(self.lst) > 0 # and self.lst[0].is_valid()
 
     def add(self, other_type):
         """combines the other set of IS elements with this one"""
@@ -130,61 +129,9 @@ class ISSet:
 
         family, group = self.profile.identify_family(aaseqs[0])
 
-        #set variables
+        # set element's variables
         for e in self.lst: e.family = family
         for e in self.lst: e.group = group
-
-        return
-
-        #create temporary fasta file
-        tpase_db = "ISFinder_transposases.fasta"
-        blast_file = "temp.fasta"
-        outf = open(blast_file, "w")
-
-        id = "temp"
-        aaseqs = [e.aaseq for e in self.lst if e.aaseq]
-        aaseqs.sort(lambda a, b: cmp(len(b), len(a)))
-        if len(aaseqs) == 0: return False
-
-        temp_record = SeqRecord.SeqRecord(id=id, seq=aaseqs[0])
-
-        SeqIO.write([temp_record], outf, "fasta")
-        outf.close()
-
-        #perform blast
-        result_handle, error_handle = NCBIStandalone.blastall(BLAST_EXE,
-                                        "blastp", tpase_db, blast_file)
-
-        record = NCBIXML.parse(result_handle).next()
-
-        best_hsp = None
-        best_alignment = None
-
-        #perform blast
-        for alignment in record.alignments:
-            for hsp in alignment.hsps:
-                if hsp.expect < TPASE_MAX_E_VALUE:
-                    if best_hsp:
-                        if hsp.score > best_hsp.score:
-                            best_alignment = alignment
-                            best_hsp = hsp
-                    else:
-                        best_alignment = alignment
-                        best_hsp = hsp
-
-        #find family and group
-        family = None
-        group = None
-
-        if best_hsp:
-            fields = best_alignment.title.split(" ")[1].split("|")
-            if fields[2] != "" and fields[2] != "-":
-                family = fields[2]
-            if fields[3] != "" and fields[3] != "-":
-                group = fields[3]
-
-        #clean up by removing temporary blast file
-        os.system("rm " + blast_file)
 
     def as_gff(self, counter):
         """
@@ -197,7 +144,7 @@ class ISSet:
         """return as a list of SeqRecord objects, one for each IS"""
         retlist = []
         for e in self.lst:
-            retlist = retlist + [e.fasta(set_name)] #+ e.aa_fasta(set_name)
+            retlist = retlist + [e.fasta(set_name)] + e.aa_fasta(set_name)
         return retlist
 
     def __repr__(self):

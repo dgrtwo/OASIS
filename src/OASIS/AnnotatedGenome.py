@@ -73,7 +73,7 @@ class AnnotatedGenome:
                 self.candidates += filter(related, thislist)
             else:
                 self.candidates += thislist
-            
+
             self.all_features += thislist
 
     def annotate(self):
@@ -82,12 +82,6 @@ class AnnotatedGenome:
         if self.annotations: return
 
         self.annotations = []
-#         for i in relevant_indices:
-#             for j in relevant_indices:
-#                 print (self.candidates[i].location._start.position,
-#                        self.candidates[j].location._start.position,
-#                        self.__match(i, j, verbose=True))
-        #print "\n".join([str((c, c.qualifiers)) for i, c in relevants])
 
         list_length = len(self.candidates)
 
@@ -111,50 +105,8 @@ class AnnotatedGenome:
                          f.location._end.position, self) for f in features]
             self.annotations.append(ISSet.ISSet(lst, self.profile))
 
-#         for i in range(list_length-1):
-#             amatch = None
-#             lst = []
-#             for j in range(i+1, list_length):
-#                 if j not in already_indices: #no need to compare more than once
-#                     if self.__match(i, j):
-#                         lst.append(self.__find_full(i, j))
-# 
-#                         # check if there are multiple different lengths
-# #                         length_i = self.candidates[i].location._end.position - self.candidates[i].location._start.position
-# #                         length_j = self.candidates[j].location._end.position - self.candidates[j].location._start.position
-# #                         if length_i != length_j:
-# #                             print self.candidates[i]
-# #                             print self.candidates[j]
-# 
-#                         amatch = self.__find_full(j, i)
-#                         already_indices.append(j)
-#                         if i not in already_indices:
-#                             already_indices.append(i)
-# 
-#             #remove multiple ORFs
-#             if amatch:
-#                 lst = [amatch] + lst
-#                 newlst = [m for m in lst if not IS_in_list(m, already)]
-#                 already = already + newlst
-#                 if len(newlst) > 0:
-#                     self.annotations.append(ISSet.ISSet(newlst, self.profile))
-
         #perform operations to improve IS elements
         self.clean_up()
-
-    def find_set_from_start(self, start_coordinate, wiggle=100):
-        """
-        find the set that contains an element close to the given
-        start coordinate- for testing purposes
-        """
-        for s in self.annotations:
-            diff = min([abs(e.start - start_coordinate) for e in s.lst])
-            if diff <= wiggle:
-                return s
-
-    def print_set(self, start, wiggle):
-        print "\n".join([e.as_gff(1)
-                         for e in self.find_set_from_start(start, wiggle).lst])
 
     def clean_up(self):
         """perform the necessary changes- clean edges, add IRs, filter,
@@ -180,21 +132,12 @@ class AnnotatedGenome:
             j = i + 1
             while j < n:
                 if similar(self.annotations[i], self.annotations[j]):
-                    #print "i =", i, "j =", j,
                     if self.annotations[i].score() > self.annotations[j].score():
-                    #    print "adding j to marked"
                         marked.append(j)
                     else:
-                    #    print "adding i to marked"
                         marked.append(i)
                 j = j + 1
             i = i + 1
-
-        #print "MARKED", marked
-
-        #for i, a in enumerate(self.annotations):
-        #    print "Annotation", i
-        #    print a
 
         self.annotations = [a for a, i in zip(self.annotations, range(n)) if i not in marked]
 
@@ -404,19 +347,6 @@ class AnnotatedGenome:
         #iterate over IS elements that haven't already been used (no multi ISs)
         unused = self.__unused()
 
-        elements = [(1355483, 1356588), (2442952, 2447572), (2448133, 2449348),
-                    (4481864, 4482886)]
-
-        def relevant_feature(f):
-            start = f.location._start.position
-            end  = f.location._end.position
-            return any([start >= s - 100 and start <= e + 100 and
-                        end >= s - 100 and end <= e + 100 for s, e in elements])
-
-        relevants = [c for i, c in enumerate(unused)
-                            if relevant_feature(c)]
-        #print "\n".join([str((c, c.qualifiers)) for c in relevants])
-
         i = 0
         #iterate over unused candidates
         while i < len(unused):
@@ -426,16 +356,12 @@ class AnnotatedGenome:
             if i < len(unused) - 1 and same_gene(c, unused[i+1]):
                 ORF_list = [c, unused[i+1]]
                 i = i + 1
-            if c in relevants:
-                print self.redundant_feature(c), ORF_list
             if not self.redundant_feature(c):
                 result_IS = None
                 if ORF_list:
                     result_IS = self.find_IRs_around(lst=ORF_list)
                 else:
-                    if c in relevants:
-                        print "here"
-                    result_IS = self.find_IRs_around(c=c, verbose=(c in relevants))
+                    result_IS = self.find_IRs_around(c=c)
                 if result_IS:
                     self.annotations.append(ISSet.ISSet([result_IS], self.profile))
             i = i + 1
@@ -503,12 +429,6 @@ class AnnotatedGenome:
             after = chromosome[start-SINGLE_IR_OUT_WINDOW:start+SINGLE_IR_IN_WINDOW]
             before = before.reverse_complement()
 
-        if verbose:
-            print start, end
-            print before
-            print after
-            print myalign(before, after)
-            print self.profile.find_IRs(None, before, after, SINGLE_IR_IN_WINDOW)
         #IR_result = find_IR_large_window(before, after.reverse_complement())
 
         #family, group = self.profile.identify_family(seq)
@@ -532,23 +452,6 @@ class AnnotatedGenome:
             newend = start - SINGLE_IR_OUT_WINDOW + pos2 + len(IR2)
             newIS = IS.IS(c, chromname, newstart, newend, self)
             if newIS.length < MINLENGTH: return False
-            return newIS
-
-            #old stuff:
-            start_index, end_index = IR_result
-            print start_index, end_index
-            #print start_index, end_index
-            if dir == 1:
-                newstart = start - start_index
-                newend = end + end_index
-            else:
-                print after[end_index:end_index+15]
-                newstart = start - end_index
-                newend = end + start_index
-            newIS = IS.IS(c, chromname, newstart, newend, self)
-            if newIS.length < MINLENGTH: return False
-            print newIS.seq
-            raise Exception("Bad Sequence")
             return newIS
 
         return False

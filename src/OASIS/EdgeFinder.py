@@ -97,10 +97,10 @@ def multinomial_likelihood(data, parameters):
     """given a list of data and a dictionary mapping values to probabilities,
     return the probability of this data"""
     n = len(data)
-    
+
     # get counts
     counts = [(v, data.count(v)) for v in parameters]
-    
+
     term1 = factorial(n) / product([factorial(c) for v, c in counts])
     term2 = product([math.pow(parameters[v], c) for v, c in counts])
     return term1 * term2
@@ -109,10 +109,10 @@ def log_multinomial_likelihood(data, parameters):
     """given a list of data and a dictionary mapping values to probabilities,
     return the probability of this data"""
     n = len(data)
-    
+
     # get counts
     counts = [(v, data.count(v)) for v in parameters]
-    
+
     term1 = math.log(factorial(n) / product([factorial(c) for v, c in counts]))
     term2 = sum([math.log(math.pow(parameters[v], c)) for v, c in counts])
     return term1 + term2
@@ -121,7 +121,7 @@ def log_likelihood_conserved(data):
     """return the log likelihood that this set of nucleotides is conserved"""
     # find the mode
     most_common = mode_nucs(data)
-    
+
     # find the likelihood given that the mode is the most common parameter
     # and all others are less common
     return log_multinomial_likelihood(data, CONSERVED_DISTRIBUTIONS[most_common])
@@ -141,22 +141,22 @@ def find_left_edges(seqs, individual=True, verbose=False):
     of conservation among them assuming that the left side is conserved"""
     # makes sure there are multiple sequences and that sequences are the same length
     assert len(seqs) > 1, "find_left_edge must be given multiple sequences"
-    
+
     lengths = list(set([len(s) for s in seqs]))
-    
+
     if 0 in lengths:
         # missing region- return 0 as distance out
         return [0] * len(seqs)
-    
+
     n = lengths[0]
-    
+
     # get distributions of nucleotides at each index
     dists = [[s[i] for s in seqs] for i in range(n)]
-    
+
     # maximize the likelihood
     # this is the product of the likelihoods that it is conserved up to the
     # nth element and that it is not conserved from the nth element onward
-    
+
     conserved_l = map(log_likelihood_conserved, dists)
     unconserved_l = map(log_likelihood_unconserved, dists)
 

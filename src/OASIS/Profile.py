@@ -88,14 +88,7 @@ class Profile:
         window1 = str(seq1)
         window2 = str(seq2)
 
-        #print window1, window2
-
         start_i, max_i, start_j, max_j, score = my_SW.align(window1, window2)
-        #print start_i, max_i, start_j, max_j, score
-
-        #print score
-        #print seq1[start_i-1:max_i]
-        #print seq2[start_j-1:max_j]
 
         IR1 = seq1[start_i-1:max_i]
         IR2 = seq2[start_j-1:max_j].reverse_complement()
