@@ -59,7 +59,8 @@ class AnnotatedGenome:
         if data_folder == None:
             data_folder = os.path.join(os.path.split(__file__)[0], "data")
         aafile = os.path.join(data_folder, ISFINDER_AA_FILE)
-        self.profile = Profile.Profile(aafile)
+        #self.profile = Profile.Profile(aafile)
+        self.profile = None
 
         self.all_features = []
 
@@ -117,7 +118,7 @@ class AnnotatedGenome:
 
         self.__find_singles()
         self.__find_partials(minimum_blast_length=500)
-        [is_set.identify_transposase() for is_set in self.annotations]
+        #[is_set.identify_transposase() for is_set in self.annotations]
         self.__group_annotations()
 
         #[is_set.re_annotate(from_edges=True) for is_set in self.annotations]
@@ -432,7 +433,7 @@ class AnnotatedGenome:
         #IR_result = find_IR_large_window(before, after.reverse_complement())
 
         #family, group = self.profile.identify_family(seq)
-        IR_result = self.profile.find_IRs(None, before, after, SINGLE_IR_IN_WINDOW)
+        IR_result = find_IRs(None, before, after, SINGLE_IR_IN_WINDOW)
 
         if IR_result:
             IR1, IR2 = IR_result

@@ -19,6 +19,7 @@ from Bio.Alphabet import IUPAC
 from OASIS_functions import *
 from Constants import *
 from SW import myalign
+import my_SW
 
 #set up parameters
 nucs = ["A", "G", "C", "T"]
@@ -201,3 +202,23 @@ def similarity(seq1, seq2):
         if i >= 6 and matchnum < i/2: break
 
     return float(matchnum) / float(len(seq1))
+
+
+def find_IRs(family, seq1, seq2, in_window):
+    """given the sequence and family of an IS and the windows around it,
+    find the most likely inverted repeats"""
+    #change to strings
+    window1 = str(seq1)
+    window2 = str(seq2)
+
+    start_i, max_i, start_j, max_j, score = my_SW.align(window1, window2)
+
+    IR1 = seq1[start_i-1:max_i]
+    IR2 = seq2[start_j-1:max_j].reverse_complement()
+
+    if score > SINGLE_IR_MIN_SCORE:
+        # return actual IR sequences
+        return IR1, IR2
+        return max_i-in_window, len(seq2)-max_j-in_window
+    else:
+        return False
